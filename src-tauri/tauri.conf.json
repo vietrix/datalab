@@ -1,0 +1,45 @@
+{
+  "productName": "DataLab (by Vietrix)",
+  "version": "0.1.0",
+  "identifier": "com.vietrix.datalab",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "security": {
+      "csp": null,
+      "capabilities": ["main"]
+    },
+    "windows": [
+      {
+        "title": "DataLab (by Vietrix)",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 680,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
+    "category": "DeveloperTool",
+    "shortDescription": "DataLab (by Vietrix) dataset distillation app",
+    "longDescription": "DataLab (by Vietrix) is a cross-platform desktop application for distilling instruction and code datasets for LLM training.",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/vietrix/datalab/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

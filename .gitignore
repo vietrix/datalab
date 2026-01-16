@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vbuild/
+*.log
+
+src-tauri/target/
+src-tauri/icons/
+src-tauri/.tauri/
+
+.env
+.env.*

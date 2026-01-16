@@ -1,0 +1,47 @@
+workflow: "DataLab (by Vietrix)"
+
+vars:
+  TAURI_DIR: src-tauri
+
+tasks:
+  default:
+    desc: Build the desktop app
+    deps: [build]
+
+  install:
+    desc: Install frontend and Rust dependencies
+    run:
+      - npm install
+      - cargo fetch --manifest-path {{TAURI_DIR}}/Cargo.toml
+
+  icons:
+    desc: Generate platform icons from src/assets/icon.svg
+    run:
+      - npm run tauri:icon
+
+  dev:
+    desc: Start Tauri in dev mode
+    deps: [install]
+    run:
+      - npm run tauri:dev
+
+  build:
+    desc: Build installer/bundles
+    deps: [install, icons]
+    run:
+      - npm run tauri:build
+
+  frontend:dev:
+    desc: Run the frontend only
+    run:
+      - npm run dev
+
+  frontend:build:
+    desc: Build the frontend assets
+    run:
+      - npm run build
+
+  rust:check:
+    desc: Run Rust checks
+    run:
+      - cargo check --manifest-path {{TAURI_DIR}}/Cargo.toml

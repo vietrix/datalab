@@ -1,0 +1,47 @@
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "highlight.js/styles/atom-one-dark.css";
+
+:root {
+  color-scheme: dark;
+  --app-font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --app-font-mono: "IBM Plex Mono", "Consolas", monospace;
+
+  --md-sys-color-primary: #7ad3f4;
+  --md-sys-color-on-primary: #003544;
+  --md-sys-color-primary-container: #004d5f;
+  --md-sys-color-on-primary-container: #c9ebff;
+  --md-sys-color-secondary: #aac5d6;
+  --md-sys-color-on-secondary: #1a3340;
+  --md-sys-color-secondary-container: #304b59;
+  --md-sys-color-on-secondary-container: #c7e5f7;
+  --md-sys-color-surface: #0f1417;
+  --md-sys-color-on-surface: #e1e3e4;
+  --md-sys-color-surface-container: #181d20;
+  --md-sys-color-surface-container-low: #12171a;
+  --md-sys-color-surface-container-high: #22292d;
+  --md-sys-color-outline: #8b9197;
+  --md-sys-color-outline-variant: #3a4247;
+  --md-sys-color-error: #ffb4ab;
+  --md-sys-color-on-error: #690005;
+  --md-sys-color-error-container: #93000a;
+  --md-sys-color-on-error-container: #ffdad6;
+  --md-sys-color-tertiary: #c3c5f1;
+  --md-sys-color-on-tertiary: #2b2f55;
+  --md-sys-color-tertiary-container: #42446a;
+  --md-sys-color-on-tertiary-container: #e0e1ff;
+
+  --md-sys-typescale-body-medium: 400 0.95rem/1.5 var(--app-font-sans);
+  --md-sys-typescale-body-small: 400 0.85rem/1.4 var(--app-font-sans);
+  --md-sys-typescale-title-medium: 600 1.05rem/1.4 var(--app-font-sans);
+  --md-sys-typescale-headline-small: 600 1.35rem/1.3 var(--app-font-sans);
+}
+
+body {
+  margin: 0;
+  font-family: var(--app-font-sans);
+  background: radial-gradient(circle at top left, #1b242a 0%, #11171b 45%, #0c1113 100%);
+  color: var(--md-sys-color-on-surface);
+}
