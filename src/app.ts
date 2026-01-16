@@ -1130,7 +1130,7 @@ export class AppRoot extends LitElement {
             </div>
             <div class="splash-status">${this.t("splash.status")}</div>
           </div>
-          <div class="splash-footer">${this.t("splash.footer", { version: "v0.1.0" })}</div>
+          <div class="splash-footer">${this.t("splash.footer", { version: "v0.1.1" })}</div>
         </div>
       </div>
     `;
