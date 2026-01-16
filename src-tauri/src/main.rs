@@ -1,4 +1,5 @@
 mod commands;
+mod menu;
 mod tauri_support;
 
 use datalab_backend::state::AppState;
@@ -10,6 +11,8 @@ fn main() {
     .setup(|app| {
       #[cfg(desktop)]
       app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+      #[cfg(desktop)]
+      menu::datalab_menu_setup(app)?;
       Ok(())
     })
     .manage(AppState::default())

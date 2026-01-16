@@ -46,9 +46,11 @@ Tauri outputs installers in `src-tauri/target/release/bundle/`.
 ## Auto Updates (GitHub Releases)
 The updater is wired through `@tauri-apps/plugin-updater` and `src-tauri/tauri.conf.json`.
 Before releasing:
-1. Generate a signing key: `cargo tauri signer generate` (store the private key securely).
-2. Set `plugins.updater.pubkey` and `plugins.updater.endpoints` in `src-tauri/tauri.conf.json`.
-3. Run `vbuild build` to produce updater artifacts and upload them with `latest.json` to the GitHub Release.
+1. Generate keys: `npx tauri signer generate --write-keys src-tauri/keys/datalab.key --ci`.
+2. Add the private key content to GitHub Secrets:
+   - `TAURI_PRIVATE_KEY` = contents of `src-tauri/keys/datalab.key`
+   - `TAURI_KEY_PASSWORD` = empty if unencrypted (or set if you add a password).
+3. Push a version tag like `v0.1.0`. The release workflow builds installers, creates `latest.json`, and uploads updater artifacts automatically.
 
 ## Project Layout
 - `src/` web UI (Lit + Material Web)

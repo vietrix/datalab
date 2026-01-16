@@ -10,6 +10,7 @@ import type {
   FilterConfig,
   FilterSummary,
   ManualChange,
+  MenuAction,
   PreviewPage,
   ProgressEvent,
   Settings,
@@ -110,4 +111,12 @@ export async function listenProgress(
   handler: (event: ProgressEvent) => void
 ) {
   return listen<ProgressEvent>("progress", (event) => handler(event.payload));
+}
+
+export async function listenMenuAction(
+  handler: (action: MenuAction) => void
+) {
+  return listen<string>("menu-action", (event) =>
+    handler(event.payload as MenuAction)
+  );
 }

@@ -8,6 +8,8 @@ import javascript from "highlight.js/lib/languages/javascript";
 import python from "highlight.js/lib/languages/python";
 import rust from "highlight.js/lib/languages/rust";
 import typescript from "highlight.js/lib/languages/typescript";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 
@@ -19,6 +21,7 @@ import {
   getPreview,
   getRecord,
   importDataset,
+  listenMenuAction,
   listenProgress,
   listCategories,
   loadSettings,
@@ -37,11 +40,12 @@ import type {
   FieldMap,
   FilterConfig,
   FilterSummary,
+  MenuAction,
   PreviewPage,
   ProgressEvent,
   ViewMode
 } from "./lib/types";
-import { languageOptions, resolveLanguage, translate, type Language } from "./i18n";
+import { resolveLanguage, translate, type Language } from "./i18n";
 
 hljs.registerLanguage("json", json);
 hljs.registerLanguage("javascript", javascript);
@@ -51,6 +55,12 @@ hljs.registerLanguage("rust", rust);
 hljs.registerLanguage("bash", bash);
 
 type UpdateHandle = Awaited<ReturnType<typeof check>>;
+
+type RecordPayload = {
+  id: number;
+  record: unknown;
+  language?: string;
+};
 
 const defaultFilters: FilterConfig = {
   requireFields: [],
@@ -74,6 +84,8 @@ export class AppRoot extends LitElement {
   @state() private step = 0;
   @state() private language: Language = "en";
   @state() private booting = true;
+  @state() private recordViewOnly = false;
+  @state() private recordError = "";
   @state() private bootSteps: string[] = [];
   @state() private bootLogs: string[] = [];
   @state() private menuCollapsed = false;
@@ -113,6 +125,8 @@ export class AppRoot extends LitElement {
     body?: string | null;
   } | null = null;
   private updateHandle: UpdateHandle | null = null;
+  private recordUnlisten: (() => void) | null = null;
+  private menuUnlisten: (() => void) | null = null;
 
   protected createRenderRoot() {
     return this;
@@ -120,6 +134,18 @@ export class AppRoot extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
+    const params = new URLSearchParams(window.location.search);
+    this.recordViewOnly = params.get("view") === "record";
+    if (this.recordViewOnly) {
+      this.booting = false;
+      this.language = resolveLanguage(
+        navigator.language.toLowerCase().startsWith("vi") ? "vi" : "en"
+      );
+      await this.loadRecordFromQuery(params);
+      await this.bindRecordListener();
+      return;
+    }
+    await this.bindMenuListener();
     await this.bootstrap();
   }
 
@@ -185,6 +211,7 @@ export class AppRoot extends LitElement {
       await new Promise((resolve) => setTimeout(resolve, 450));
       this.booting = false;
       clearTimeout(fallbackTimer);
+      void this.autoInstallAvailableUpdate();
     }
   }
 
@@ -291,6 +318,125 @@ export class AppRoot extends LitElement {
         </div>
       </section>
     `;
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.recordUnlisten) {
+      this.recordUnlisten();
+      this.recordUnlisten = null;
+    }
+    if (this.menuUnlisten) {
+      this.menuUnlisten();
+      this.menuUnlisten = null;
+    }
+  }
+
+  private async bindMenuListener() {
+    try {
+      this.menuUnlisten = await listenMenuAction((action) => {
+        void this.handleMenuAction(action);
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  private async handleMenuAction(action: MenuAction) {
+    switch (action) {
+      case "import":
+        await this.handleImport();
+        break;
+      case "export-selected":
+        await this.handleExport("selected");
+        break;
+      case "export-removed":
+        await this.handleExport("removed");
+        break;
+      case "toggle-menu":
+        this.menuCollapsed = !this.menuCollapsed;
+        break;
+      case "check-updates":
+        await this.checkForUpdates(false);
+        break;
+      case "open-logs":
+        await this.loadLogs();
+        break;
+      case "open-help":
+        this.showHelp = true;
+        break;
+      case "next-step":
+        await this.changeStep(this.step + 1);
+        break;
+      case "prev-step":
+        await this.changeStep(this.step - 1);
+        break;
+      case "language-en":
+        await this.changeLanguage("en");
+        break;
+      case "language-vi":
+        await this.changeLanguage("vi");
+        break;
+      default:
+        break;
+    }
+  }
+
+  private async bindRecordListener() {
+    try {
+      const currentWindow = getCurrentWindow();
+      this.recordUnlisten = await currentWindow.listen<RecordPayload>(
+        "record-data",
+        async (event) => {
+          const payload = event.payload;
+          if (payload?.language) {
+            this.language = resolveLanguage(payload.language);
+          }
+          if (payload) {
+            this.recordError = "";
+            this.recordDetail = { id: payload.id, record: payload.record };
+            await this.updateRecordWindowTitle(payload.id);
+          }
+        }
+      );
+    } catch (error) {
+      // Record-only window should stay functional even if listener fails.
+      console.error(error);
+    }
+  }
+
+  private async updateRecordWindowTitle(id: number) {
+    try {
+      await getCurrentWindow().setTitle(
+        this.t("record.windowTitle", { id: id + 1 })
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  private async loadRecordFromQuery(params: URLSearchParams) {
+    const id = params.get("id");
+    if (!id) {
+      return;
+    }
+    const parsed = Number(id);
+    if (!Number.isFinite(parsed)) {
+      this.recordError = this.t("record.loadError");
+      return;
+    }
+    const language = params.get("lang");
+    if (language) {
+      this.language = resolveLanguage(language);
+    }
+    try {
+      const record = await getRecord(parsed);
+      this.recordDetail = { id: parsed, record };
+      this.recordError = "";
+      await this.updateRecordWindowTitle(parsed);
+    } catch (error) {
+      this.recordError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   private async runTask<T>(task: () => Promise<T>) {
@@ -423,7 +569,52 @@ export class AppRoot extends LitElement {
 
   private async showRecord(id: number) {
     const record = await getRecord(id);
-    this.recordDetail = { id, record };
+    await this.openRecordWindow({
+      id,
+      record,
+      language: this.language
+    });
+  }
+
+  private async openRecordWindow(payload: RecordPayload) {
+    const label = "record-viewer";
+    const title = this.t("record.windowTitle", { id: payload.id + 1 });
+    const url = `/?view=record&id=${payload.id}&lang=${payload.language ?? "en"}`;
+    const sendPayload = async () => {
+      try {
+        await getCurrentWindow().emitTo(label, "record-data", payload);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    const existing = await WebviewWindow.getByLabel(label);
+    if (existing) {
+      await existing.setTitle(title);
+      await existing.show();
+      await existing.setFocus();
+      await sendPayload();
+      return;
+    }
+
+    const recordWindow = new WebviewWindow(label, {
+      title,
+      url,
+      width: 1280,
+      height: 720,
+      minWidth: 960,
+      minHeight: 540,
+      resizable: true,
+      center: true,
+      focus: true
+    });
+
+    recordWindow.once("tauri://created", async () => {
+      await sendPayload();
+    });
+    recordWindow.once("tauri://error", (error) => {
+      console.error(error);
+    });
   }
 
   private async saveUserSettings() {
@@ -446,45 +637,49 @@ export class AppRoot extends LitElement {
     await this.saveUserSettings();
   }
 
-  private async checkForUpdates(silent = false) {
+  private async checkForUpdates(silent = false, autoInstall = false) {
     if (this.updateStatus === "checking") {
       return;
     }
     this.updateStatus = "checking";
     this.updateError = "";
     this.updateProgress = 0;
-    if (!silent) {
+    if (!silent || autoInstall) {
       this.showUpdateDialog = true;
     }
     try {
       const update = await check();
       this.updateHandle = update;
-      if (update) {
-        this.updateInfo = {
-          version: update.version,
-          currentVersion: update.currentVersion,
-          date: update.date,
-          body: update.body
-        };
-        this.updateStatus = "available";
-        this.showUpdateDialog = true;
+        if (update) {
+          this.updateInfo = {
+            version: update.version,
+            currentVersion: update.currentVersion,
+            date: update.date,
+            body: update.body
+          };
+          this.updateStatus = "available";
+          if (autoInstall) {
+            await this.installUpdate(true);
+          } else {
+            this.showUpdateDialog = true;
+          }
       } else {
         this.updateInfo = null;
         this.updateStatus = "none";
-        if (silent) {
+        if (silent && !autoInstall) {
           this.showUpdateDialog = false;
         }
       }
     } catch (error) {
       this.updateStatus = "error";
       this.updateError = error instanceof Error ? error.message : String(error);
-      if (silent) {
+      if (silent && !autoInstall) {
         this.showUpdateDialog = false;
       }
     }
   }
 
-  private async installUpdate() {
+  private async installUpdate(autoRestart = false) {
     if (!this.updateHandle) {
       return;
     }
@@ -505,11 +700,22 @@ export class AppRoot extends LitElement {
       await this.updateHandle.close();
       this.updateStatus = "ready";
       this.showUpdateDialog = true;
+      if (autoRestart) {
+        await this.restartApp();
+      }
     } catch (error) {
       this.updateStatus = "error";
       this.updateError = error instanceof Error ? error.message : String(error);
       this.showUpdateDialog = true;
     }
+  }
+
+  private async autoInstallAvailableUpdate() {
+    if (this.updateStatus !== "available" || !this.updateHandle) {
+      return;
+    }
+    this.showUpdateDialog = true;
+    await this.installUpdate(true);
   }
 
   private async restartApp() {
@@ -646,10 +852,111 @@ export class AppRoot extends LitElement {
     }
   }
 
+  private parseStructuredText(value: string) {
+    const trimmed = value.trim();
+    if (
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private getStructuredEntries(value: unknown) {
+    if (Array.isArray(value)) {
+      return value.map((entry, index) => ({
+        key: `[${index}]`,
+        value: entry
+      }));
+    }
+    if (value && typeof value === "object") {
+      return Object.entries(value as Record<string, unknown>).map(
+        ([key, entry]) => ({
+          key,
+          value: entry
+        })
+      );
+    }
+    return [];
+  }
+
+  private renderTagList(values: unknown[]) {
+    const items = values
+      .map((entry) => this.stringifyRecordValue(entry))
+      .filter((entry) => entry.trim().length > 0);
+    if (!items.length) {
+      return html`<span class="muted">—</span>`;
+    }
+    return html`
+      <div class="meta-tags">
+        ${items.map((entry) => html`<span class="tag">${entry}</span>`)}
+      </div>
+    `;
+  }
+
+  private renderStructuredValue(value: unknown) {
+    const entries = this.getStructuredEntries(value);
+    if (!entries.length) {
+      return html`<span class="muted">—</span>`;
+    }
+    const summary = this.t("record.details", { count: entries.length });
+    return html`
+      <details class="meta-details" open>
+        <summary>${summary}</summary>
+        <div class="meta-table-wrap">
+          <table class="data-table meta-table">
+            <thead>
+              <tr>
+                <th class="cell-key">${this.t("record.field")}</th>
+                <th>${this.t("record.value")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${entries.map(
+                (entry) => html`
+                  <tr>
+                    <td class="cell-key">${entry.key}</td>
+                    <td class="cell">${this.renderRecordValue(entry.value)}</td>
+                  </tr>
+                `
+              )}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    `;
+  }
+
   private renderRecordValue(value: unknown) {
+    if (Array.isArray(value)) {
+      const primitivesOnly = value.every(
+        (entry) =>
+          entry === null ||
+          entry === undefined ||
+          typeof entry === "string" ||
+          typeof entry === "number" ||
+          typeof entry === "boolean"
+      );
+      if (primitivesOnly) {
+        return this.renderTagList(value);
+      }
+      return this.renderStructuredValue(value);
+    }
+    if (value && typeof value === "object") {
+      return this.renderStructuredValue(value);
+    }
     const text = this.stringifyRecordValue(value);
     if (!text) {
       return html`<span class="muted">—</span>`;
+    }
+    const parsed = this.parseStructuredText(text);
+    if (parsed) {
+      return this.renderStructuredValue(parsed);
     }
     if (text.includes("\n") || text.length > 120) {
       return this.renderCodeCell(text);
@@ -701,6 +1008,14 @@ export class AppRoot extends LitElement {
     `;
   }
 
+  private renderEmptyTableBlock(message: string) {
+    return html`
+      <div class="table-wrap table-wrap-empty">
+        <div class="empty-state">${message}</div>
+      </div>
+    `;
+  }
+
   private getPreviewColumns() {
     const columns: string[] = [];
     const append = (name?: string) => {
@@ -723,41 +1038,11 @@ export class AppRoot extends LitElement {
   }
 
   render() {
+    if (this.recordViewOnly) {
+      return this.renderRecordWindow();
+    }
     return html`
       <div class="app-shell">
-        <header class="top-bar">
-          <div class="brand">
-            <div class="brand-mark"></div>
-            ${this.t("app.title")}
-          </div>
-          <div class="top-actions">
-            <md-outlined-select
-              label=${this.t("label.language")}
-              value=${this.language}
-              @change=${(event: Event) =>
-                this.changeLanguage(
-                  (event.target as HTMLInputElement).value as Language
-                )}
-            >
-              ${languageOptions.map(
-                (option) => html`
-                  <md-select-option value=${option.code}>
-                    <div slot="headline">${option.label}</div>
-                  </md-select-option>
-                `
-              )}
-            </md-outlined-select>
-            <md-outlined-button @click=${() => this.checkForUpdates(false)}
-              >${this.t("action.checkUpdates")}</md-outlined-button
-            >
-            <md-outlined-button @click=${() => (this.showHelp = true)}
-              >${this.t("action.help")}</md-outlined-button
-            >
-            <md-outlined-button @click=${() => this.loadLogs()}
-              >${this.t("action.logs")}</md-outlined-button
-            >
-          </div>
-        </header>
         <nav class="stepper">
           <div class="inline-row">
             ${this.stepLabels.map((label, index) =>
@@ -783,47 +1068,46 @@ export class AppRoot extends LitElement {
                 ? this.renderDistillStep()
                 : this.renderReviewStep()}
         </main>
-        <footer class="footer">
-          <div class="status">
-            ${this.dataset
-              ? html`<span class="pill"
-                  >${this.t("status.records", {
-                    count: this.dataset.recordCount
-                  })}</span
-                >
-                <span class="muted"
-                  >${this.formatBytes(this.dataset.sizeBytes)}</span
-                >`
-              : html`<span class="muted">${this.t("status.noDataset")}</span>`}
-            ${this.preview
-              ? html`<span class="pill"
-                  >${this.t("status.pageOf", {
-                    page: this.preview.page,
-                    total: Math.max(
-                      1,
-                      Math.ceil(this.preview.totalCount / this.preview.pageSize)
-                    )
-                  })}</span
-                >`
-              : nothing}
-          </div>
-          <div class="footer-actions">
-            <md-outlined-button
-              ?disabled=${this.step === 0}
-              @click=${() => this.changeStep(this.step - 1)}
-              >${this.t("action.back")}</md-outlined-button
-            >
-            <md-filled-button
-              ?disabled=${this.step === 3 || (this.step > 0 && !this.dataset)}
-              @click=${() => this.changeStep(this.step + 1)}
-              >${this.t("action.next")}</md-filled-button
-            >
-          </div>
-        </footer>
         ${this.renderDialogs()}
       </div>
       ${this.booting ? this.renderSplash() : nothing}
     `;
+  }
+
+  private renderRecordWindow() {
+    const title = this.recordDetail
+      ? this.t("record.windowTitle", { id: this.recordDetail.id + 1 })
+      : this.t("record.windowTitleEmpty");
+    const emptyState = html`
+      <div class="table-wrap record-table-wrap table-wrap-empty">
+        <div class="empty-state">
+          ${this.recordError ? this.recordError : this.t("hint.noData")}
+        </div>
+      </div>
+    `;
+    return html`
+      <div class="record-window">
+        <header class="record-window-header">
+          <div>
+            <div class="record-window-title">${title}</div>
+            <div class="record-window-subtitle">
+              ${this.t("record.windowSubtitle")}
+            </div>
+          </div>
+        </header>
+        <section class="record-window-body">
+          ${this.recordDetail ? this.renderRecordTable(this.recordDetail.record) : emptyState}
+        </section>
+      </div>
+    `;
+  }
+
+  private async closeRecordWindow() {
+    try {
+      await getCurrentWindow().close();
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   private renderSplash() {
@@ -1351,12 +1635,10 @@ export class AppRoot extends LitElement {
 
   private renderPreviewBlock(allowToggle: boolean) {
     if (!this.dataset) {
-      return html`<div class="empty-state">${this.t("hint.noData")}</div>`;
+      return this.renderEmptyTableBlock(this.t("hint.noData"));
     }
     if (!this.preview || this.preview.items.length === 0) {
-      return html`<div class="empty-state">
-        ${this.t("hint.noRecords")}
-      </div>`;
+      return this.renderEmptyTableBlock(this.t("hint.noRecords"));
     }
     const totalPages = Math.max(
       1,
@@ -1504,22 +1786,6 @@ export class AppRoot extends LitElement {
         </div>
         <div slot="actions">
           <md-outlined-button @click=${() => (this.showLogs = false)}
-            >${this.t("action.close")}</md-outlined-button
-          >
-        </div>
-      </md-dialog>
-
-      <md-dialog class="record-dialog" ?open=${Boolean(this.recordDetail)}>
-        <div slot="headline">${this.t("dialog.record.title", {
-          id: this.recordDetail?.id ?? ""
-        })}</div>
-        <div slot="content" class="record-dialog-content">
-          ${this.recordDetail
-            ? this.renderRecordTable(this.recordDetail.record)
-            : html`<div class="empty-state">${this.t("hint.noData")}</div>`}
-        </div>
-        <div slot="actions">
-          <md-outlined-button @click=${() => (this.recordDetail = null)}
             >${this.t("action.close")}</md-outlined-button
           >
         </div>

@@ -95,3 +95,16 @@ export interface Settings {
   filters: FilterConfig;
   distill: DistillConfig;
 }
+
+export type MenuAction =
+  | "import"
+  | "export-selected"
+  | "export-removed"
+  | "toggle-menu"
+  | "check-updates"
+  | "open-logs"
+  | "open-help"
+  | "next-step"
+  | "prev-step"
+  | "language-en"
+  | "language-vi";
