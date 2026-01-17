@@ -48,8 +48,7 @@ The updater is wired through `@tauri-apps/plugin-updater` and `src-tauri/tauri.c
 Before releasing:
 1. Generate keys: `npx tauri signer generate --write-keys src-tauri/keys/datalab.key --ci`.
 2. Add the private key content to GitHub Secrets:
-   - `TAURI_PRIVATE_KEY` = contents of `src-tauri/keys/datalab.key`
-   - `TAURI_KEY_PASSWORD` = empty if unencrypted (or set if you add a password).
+   - `TAURI_SIGNING_PRIVATE_KEY` = contents of `src-tauri/keys/datalab.key`
 3. Push a version tag like `v0.1.0`. The release workflow builds installers, creates `latest.json`, and uploads updater artifacts automatically.
 
 ## Project Layout
