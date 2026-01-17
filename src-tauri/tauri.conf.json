@@ -1,6 +1,6 @@
 {
   "productName": "DataLab (by Vietrix)",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "com.vietrix.datalab",
   "build": {
     "beforeDevCommand": "npm run dev",
